@@ -1,4 +1,5 @@
 import logging
+import json
 
 from mem0.memory.utils import format_entities
 
@@ -161,8 +162,13 @@ class MemoryGraph:
         entity_type_map = {}
 
         try:
-            for item in search_results["tool_calls"][0]["arguments"]["entities"]:
-                entity_type_map[item["entity"]] = item["entity_type"]
+            if isinstance(search_results, dict) and search_results.get("tool_calls"):
+                for call in search_results["tool_calls"]:
+                    if call["name"] != "extract_entities":
+                        continue
+                    arguments = json.loads(call["arguments"])
+                    for item in arguments["entities"]:
+                        entity_type_map[item["entity"]] = item["entity_type"]
         except Exception as e:
             logger.exception(f"Error in search tool: {e}, llm_provider={self.llm_provider}, search_results={search_results}")
 
@@ -270,9 +276,10 @@ class MemoryGraph:
 
         logger.debug(f"Memory updates: memory_updates={memory_updates}, search_output={search_output}, search_output_string={search_output_string}, user_prompt={user_prompt}")
         to_be_deleted = []
-        for item in memory_updates["tool_calls"]:
-            if item["name"] == "delete_graph_memory":
-                to_be_deleted.append(item["arguments"])
+        if not isinstance(memory_updates, str) and memory_updates.get("tool_calls"):
+            for item in memory_updates["tool_calls"]:
+                if item["name"] == "delete_graph_memory":
+                    to_be_deleted.append(json.loads(item["arguments"]))
         # in case if it is not in the correct format
         to_be_deleted = self._remove_spaces_from_entities(to_be_deleted)
         logger.debug(f"Deleted relationships: {to_be_deleted}")
