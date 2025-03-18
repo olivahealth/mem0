@@ -128,13 +128,17 @@ class Memory(MemoryBase):
             filters["run_id"] = metadata["run_id"] = run_id
 
         if not any(key in filters for key in ("user_id", "agent_id", "run_id")):
-            raise ValueError("One of the filters: user_id, agent_id or run_id is required!")
+            raise ValueError(
+                "One of the filters: user_id, agent_id or run_id is required!"
+            )
 
         if isinstance(messages, str):
             messages = [{"role": "user", "content": messages}]
 
         if self.config.llm.config.get("enable_vision"):
-            messages = parse_vision_messages(messages, self.llm, self.config.llm.config.get("vision_details"))
+            messages = parse_vision_messages(
+                messages, self.llm, self.config.llm.config.get("vision_details")
+            )
         else:
             messages = parse_vision_messages(messages)
 
@@ -246,11 +250,15 @@ class Memory(MemoryBase):
                 logging.info(resp)
                 try:
                     if not resp.get("text"):
-                        logging.info("Skipping memory entry because of empty `text` field.")
+                        logging.info(
+                            "Skipping memory entry because of empty `text` field."
+                        )
                         continue
                     elif resp.get("event") == "ADD":
                         memory_id = self._create_memory(
-                            data=resp.get("text"), existing_embeddings=new_message_embeddings, metadata=metadata
+                            data=resp.get("text"),
+                            existing_embeddings=new_message_embeddings,
+                            metadata=metadata,
                         )
                         returned_memories.append(
                             {
@@ -290,7 +298,11 @@ class Memory(MemoryBase):
         except Exception as e:
             logging.error(f"Error in new_memories_with_actions: {e}")
 
-        capture_event("mem0.add", self, {"version": self.api_version, "keys": list(filters.keys())})
+        capture_event(
+            "mem0.add",
+            self,
+            {"version": self.api_version, "keys": list(filters.keys())},
+        )
 
         return returned_memories
 
@@ -300,7 +312,13 @@ class Memory(MemoryBase):
             if filters.get("user_id") is None:
                 filters["user_id"] = "user"
 
-            data = "\n".join([msg["content"] for msg in messages if "content" in msg and msg["role"] != "system"])
+            data = "\n".join(
+                [
+                    msg["content"]
+                    for msg in messages
+                    if "content" in msg and msg["role"] != "system"
+                ]
+            )
             added_entities = self.graph.add(data, filters)
 
         return added_entities
@@ -320,7 +338,11 @@ class Memory(MemoryBase):
         if not memory:
             return None
 
-        filters = {key: memory.payload[key] for key in ["user_id", "agent_id", "run_id"] if memory.payload.get(key)}
+        filters = {
+            key: memory.payload[key]
+            for key in ["user_id", "agent_id", "run_id"]
+            if memory.payload.get(key)
+        }
 
         # Prepare base memory item
         memory_item = MemoryItem(
@@ -356,18 +378,30 @@ class Memory(MemoryBase):
         if run_id:
             filters["run_id"] = run_id
 
-        capture_event("mem0.get_all", self, {"limit": limit, "keys": list(filters.keys())})
+        capture_event(
+            "mem0.get_all", self, {"limit": limit, "keys": list(filters.keys())}
+        )
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            future_memories = executor.submit(self._get_all_from_vector_store, filters, limit)
-            future_graph_entities = executor.submit(self.graph.get_all, filters, limit) if self.enable_graph else None
+            future_memories = executor.submit(
+                self._get_all_from_vector_store, filters, limit
+            )
+            future_graph_entities = (
+                executor.submit(self.graph.get_all, filters, limit)
+                if self.enable_graph
+                else None
+            )
 
             concurrent.futures.wait(
-                [future_memories, future_graph_entities] if future_graph_entities else [future_memories]
+                [future_memories, future_graph_entities]
+                if future_graph_entities
+                else [future_memories]
             )
 
             all_memories = future_memories.result()
-            graph_entities = future_graph_entities.result() if future_graph_entities else None
+            graph_entities = (
+                future_graph_entities.result() if future_graph_entities else None
+            )
 
         if self.enable_graph:
             return {"results": all_memories, "relations": graph_entities}
@@ -406,9 +440,19 @@ class Memory(MemoryBase):
                     created_at=mem.payload.get("created_at"),
                     updated_at=mem.payload.get("updated_at"),
                 ).model_dump(exclude={"score"}),
-                **{key: mem.payload[key] for key in ["user_id", "agent_id", "run_id"] if key in mem.payload},
+                **{
+                    key: mem.payload[key]
+                    for key in ["user_id", "agent_id", "run_id"]
+                    if key in mem.payload
+                },
                 **(
-                    {"metadata": {k: v for k, v in mem.payload.items() if k not in excluded_keys}}
+                    {
+                        "metadata": {
+                            k: v
+                            for k, v in mem.payload.items()
+                            if k not in excluded_keys
+                        }
+                    }
                     if any(k for k in mem.payload if k not in excluded_keys)
                     else {}
                 ),
@@ -417,7 +461,16 @@ class Memory(MemoryBase):
         ]
         return all_memories
 
-    def search(self, query, user_id=None, agent_id=None, run_id=None, limit=100, filters=None):
+    def search(
+        self,
+        query,
+        user_id=None,
+        agent_id=None,
+        run_id=None,
+        limit=100,
+        filters=None,
+        rerank=False,
+    ):
         """
         Search for memories.
 
@@ -428,6 +481,7 @@ class Memory(MemoryBase):
             run_id (str, optional): ID of the run to search for. Defaults to None.
             limit (int, optional): Limit the number of results. Defaults to 100.
             filters (dict, optional): Filters to apply to the search. Defaults to None.
+            rerank (bool, optional): Whether to apply reranking. Defaults to False.
 
         Returns:
             list: List of search results.
@@ -441,7 +495,9 @@ class Memory(MemoryBase):
             filters["run_id"] = run_id
 
         if not any(key in filters for key in ("user_id", "agent_id", "run_id")):
-            raise ValueError("One of the filters: user_id, agent_id or run_id is required!")
+            raise ValueError(
+                "One of the filters: user_id, agent_id or run_id is required!"
+            )
 
         capture_event(
             "mem0.search",
@@ -450,17 +506,25 @@ class Memory(MemoryBase):
         )
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            future_memories = executor.submit(self._search_vector_store, query, filters, limit)
+            future_memories = executor.submit(
+                self._search_vector_store, query, filters, limit, rerank
+            )
             future_graph_entities = (
-                executor.submit(self.graph.search, query, filters, limit) if self.enable_graph else None
+                executor.submit(self.graph.search, query, filters, limit)
+                if self.enable_graph
+                else None
             )
 
             concurrent.futures.wait(
-                [future_memories, future_graph_entities] if future_graph_entities else [future_memories]
+                [future_memories, future_graph_entities]
+                if future_graph_entities
+                else [future_memories]
             )
 
             original_memories = future_memories.result()
-            graph_entities = future_graph_entities.result() if future_graph_entities else None
+            graph_entities = (
+                future_graph_entities.result() if future_graph_entities else None
+            )
 
         if self.enable_graph:
             return {"results": original_memories, "relations": graph_entities}
@@ -477,9 +541,30 @@ class Memory(MemoryBase):
         else:
             return {"results": original_memories}
 
-    def _search_vector_store(self, query, filters, limit):
+    def _search_vector_store(self, query, filters, limit, rerank=False):
+        """
+        Search vector store with optional reranking.
+
+        Args:
+            query (str): Original query text
+            filters (dict): Filters to apply
+            limit (int): Number of results to return
+            rerank (bool): Whether to apply reranking
+        """
         embeddings = self.embedding_model.embed(query, "search")
-        memories = self.vector_store.search(query=embeddings, limit=limit, filters=filters)
+        if rerank:
+            logger.info("Vector store search: Reranking enabled")
+            memories = self.vector_store.search_with_rerank(
+                query=query,
+                query_vector=embeddings,
+                limit=limit,
+                filters=filters,
+                rerank=True,
+            )
+        else:
+            memories = self.vector_store.search(
+                query=embeddings, limit=limit, filters=filters
+            )
 
         excluded_keys = {
             "user_id",
@@ -502,9 +587,19 @@ class Memory(MemoryBase):
                     updated_at=mem.payload.get("updated_at"),
                     score=mem.score,
                 ).model_dump(),
-                **{key: mem.payload[key] for key in ["user_id", "agent_id", "run_id"] if key in mem.payload},
+                **{
+                    key: mem.payload[key]
+                    for key in ["user_id", "agent_id", "run_id"]
+                    if key in mem.payload
+                },
                 **(
-                    {"metadata": {k: v for k, v in mem.payload.items() if k not in excluded_keys}}
+                    {
+                        "metadata": {
+                            k: v
+                            for k, v in mem.payload.items()
+                            if k not in excluded_keys
+                        }
+                    }
                     if any(k for k in mem.payload if k not in excluded_keys)
                     else {}
                 ),
@@ -607,7 +702,9 @@ class Memory(MemoryBase):
             ids=[memory_id],
             payloads=[metadata],
         )
-        self.db.add_history(memory_id, None, data, "ADD", created_at=metadata["created_at"])
+        self.db.add_history(
+            memory_id, None, data, "ADD", created_at=metadata["created_at"]
+        )
         capture_event("mem0._create_memory", self, {"memory_id": memory_id})
         return memory_id
 
@@ -617,14 +714,18 @@ class Memory(MemoryBase):
         try:
             existing_memory = self.vector_store.get(vector_id=memory_id)
         except Exception:
-            raise ValueError(f"Error getting memory with ID {memory_id}. Please provide a valid 'memory_id'")
+            raise ValueError(
+                f"Error getting memory with ID {memory_id}. Please provide a valid 'memory_id'"
+            )
         prev_value = existing_memory.payload.get("data")
 
         new_metadata = metadata or {}
         new_metadata["data"] = data
         new_metadata["hash"] = hashlib.md5(data.encode()).hexdigest()
         new_metadata["created_at"] = existing_memory.payload.get("created_at")
-        new_metadata["updated_at"] = datetime.now(pytz.timezone("US/Pacific")).isoformat()
+        new_metadata["updated_at"] = datetime.now(
+            pytz.timezone("US/Pacific")
+        ).isoformat()
 
         if "user_id" in existing_memory.payload:
             new_metadata["user_id"] = existing_memory.payload["user_id"]

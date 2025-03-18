@@ -16,7 +16,7 @@ services:
       - .:/app                      # Server code. This allows to reload the app when the server code is updated
       - ../mem0:/app/packages/mem0  # Mem0 library. This allows to reload the app when the library code is updated
     depends_on:
-      postgres:
+      mem0-postgres:
         condition: service_healthy
       neo4j:
         condition: service_healthy
@@ -25,7 +25,7 @@ services:
       - PYTHONDONTWRITEBYTECODE=1  # Prevents Python from writing .pyc files
       - PYTHONUNBUFFERED=1  # Ensures Python output is sent straight to terminal
 
-  postgres:
+  mem0-postgres:
       image: ankane/pgvector:v0.5.1
       restart: on-failure
       shm_size: "128mb" # Increase this if vacuuming fails with a "no space left on device" error
