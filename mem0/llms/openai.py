@@ -19,8 +19,8 @@ class OpenAILLM(LLMBase):
             self.client = OpenAI(
                 api_key=os.environ.get("OPENROUTER_API_KEY"),
                 base_url=self.config.openrouter_base_url
-                or os.getenv("OPENROUTER_API_BASE")
-                or "https://openrouter.ai/api/v1",
+                         or os.getenv("OPENROUTER_API_BASE")
+                         or "https://openrouter.ai/api/v1",
             )
         else:
             api_key = self.config.api_key or os.getenv("OPENAI_API_KEY")
@@ -105,6 +105,10 @@ class OpenAILLM(LLMBase):
         if tools:  # TODO: Remove tools if no issues found with new memory addition logic
             params["tools"] = tools
             params["tool_choice"] = tool_choice
+
+        if tools:
+            params["tools"] = tools
+            params["tool_choice"] = "auto"
 
         response = self.client.chat.completions.create(**params)
         return self._parse_response(response, tools)
