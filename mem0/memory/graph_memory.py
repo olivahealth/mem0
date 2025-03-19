@@ -62,7 +62,7 @@ class MemoryGraph:
         deleted_entities = self._delete_entities(to_be_deleted, filters["user_id"])
         added_entities = self._add_entities(to_be_added, filters["user_id"], entity_type_map)
 
-        return {"deleted_entities": deleted_entities, "added_entities": added_entities}
+        return {"deleted_entities": deleted_entities, "added_entities": added_entities, "relations": to_be_added}
 
     def search(self, query, filters, limit=100):
         """
@@ -212,11 +212,6 @@ class MemoryGraph:
             if tool_call and tool_call["arguments"]:
                 arguments = json.loads(tool_call["arguments"])
                 entities = arguments.get("entities", [])
-     # type: ignore
-     #    if extracted_entities["tool_calls"]:
-     #        extracted_entities = extracted_entities["tool_calls"][0]["arguments"]["entities"]
-     #    else:
-     #        extracted_entities = []
 
         entities = self._remove_spaces_from_entities(entities)
         logger.debug(f"Extracted entities: {entities}")
@@ -360,14 +355,9 @@ class MemoryGraph:
                 params = {
                     "source_id": source_node_search_result[0]["elementId(source_candidate)"],
                     "destination_name": destination,
-                    "relationship": relationship,
-                    "destination_type": destination_type,
                     "destination_embedding": dest_embedding,
                     "user_id": user_id,
                 }
-                resp = self.graph.query(cypher, params=params)
-                results.append(resp)
-
             elif destination_node_search_result and not source_node_search_result:
                 cypher = f"""
                     MATCH (destination)
@@ -385,14 +375,9 @@ class MemoryGraph:
                 params = {
                     "destination_id": destination_node_search_result[0]["elementId(destination_candidate)"],
                     "source_name": source,
-                    "relationship": relationship,
-                    "source_type": source_type,
                     "source_embedding": source_embedding,
                     "user_id": user_id,
                 }
-                resp = self.graph.query(cypher, params=params)
-                results.append(resp)
-
             elif source_node_search_result and destination_node_search_result:
                 cypher = f"""
                     MATCH (source)
@@ -409,12 +394,8 @@ class MemoryGraph:
                     "source_id": source_node_search_result[0]["elementId(source_candidate)"],
                     "destination_id": destination_node_search_result[0]["elementId(destination_candidate)"],
                     "user_id": user_id,
-                    "relationship": relationship,
                 }
-                resp = self.graph.query(cypher, params=params)
-                results.append(resp)
-
-            elif not source_node_search_result and not destination_node_search_result:
+            else:
                 cypher = f"""
                     MERGE (n:{source_type} {{name: $source_name, user_id: $user_id}})
                     ON CREATE SET n.created = timestamp(), n.embedding = $source_embedding
@@ -428,15 +409,13 @@ class MemoryGraph:
                     """
                 params = {
                     "source_name": source,
-                    "source_type": source_type,
                     "dest_name": destination,
-                    "destination_type": destination_type,
                     "source_embedding": source_embedding,
                     "dest_embedding": dest_embedding,
                     "user_id": user_id,
                 }
-                resp = self.graph.query(cypher, params=params)
-                results.append(resp)
+            result = self.graph.query(cypher, params=params)
+            results.append(result)
         return results
 
     def _remove_spaces_from_entities(self, entity_list):
