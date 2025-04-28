@@ -96,23 +96,39 @@ class PGVector(VectorStoreBase):
             self.cur = None
 
     @contextmanager
-    def get_connection(self):
-        """Context manager for handling connections from pool or direct connection."""
-        if self.use_pool:
-            conn = self.pool.getconn()
-            try:
-                yield conn
-            finally:
-                self.pool.putconn(conn)
-        else:
-            yield self.conn
-
-    @contextmanager
     def get_cursor(self):
-        """Context manager for handling cursors."""
-        with self.get_connection() as conn:
-            with conn.cursor() as cur:
-                yield cur
+        """Context manager for getting a working database cursor with automatic retry."""
+        max_retries = 3
+        retry_count = 0
+
+        while retry_count < max_retries:
+            try:
+                if self.use_pool:
+                    conn = self.pool.getconn()
+                else:
+                    if not hasattr(self, 'conn') or self.conn is None or self.conn.closed:
+                        self.conn = psycopg2.connect(**self.connection_params)
+                    conn = self.conn
+
+                cur = conn.cursor()
+                try:
+                    # Test the cursor
+                    cur.execute('SELECT 1')
+                    yield cur
+                    conn.commit()  # Automatically commit successful transactions
+                finally:
+                    cur.close()
+                    if self.use_pool:
+                        self.pool.putconn(conn)
+                break  # Success, exit the retry loop
+
+            except (psycopg2.Error, psycopg2.InterfaceError) as e:
+                retry_count += 1
+                if retry_count == max_retries:
+                    raise
+                logger.warning(f"Database connection error (attempt {retry_count}): {str(e)}")
+                if not self.use_pool:
+                    self.conn = None  # Force new connection on next try
 
     def create_col(self, embedding_model_dims):
         """
