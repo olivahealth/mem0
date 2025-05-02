@@ -16,7 +16,7 @@ class DatadogMetrics:
     def __init__(self):
         env = os.getenv("ENV", "local")
         service_name = "mem0"
-        self.default_tags = [f"env:{env.value}", f"service:{service_name}"]
+        self.default_tags = [f"env:{env}", f"service:{service_name}"]
         self.prefix = "oliva.mem0."
 
     @classmethod
