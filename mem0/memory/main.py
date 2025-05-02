@@ -3,6 +3,7 @@ import concurrent
 import hashlib
 import json
 import logging
+import time
 import uuid
 import warnings
 from datetime import datetime
@@ -28,12 +29,15 @@ from mem0.memory.utils import (
     remove_code_blocks,
 )
 from mem0.utils.factory import EmbedderFactory, LlmFactory, VectorStoreFactory
+from mem0.utils.metrics import DatadogMetrics
+
 
 # Setup user config
 setup_config()
 
 logger = logging.getLogger(__name__)
 
+metrics = DatadogMetrics.get_instance()
 
 class Memory(MemoryBase):
     def __init__(self, config: MemoryConfig = MemoryConfig()):
@@ -488,10 +492,14 @@ class Memory(MemoryBase):
         )
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
+            start_time = time.perf_counter()
             future_memories = executor.submit(self._search_vector_store, query, filters, limit)
+            metrics.histogram("vector_search_total_time", time.perf_counter() - start_time,tags=[f"limit:{limit}"])
+            start_time = time.perf_counter()
             future_graph_entities = (
                 executor.submit(self.graph.search, query, filters, limit) if self.enable_graph else None
             )
+            metrics.histogram("graph_search_total_time", time.perf_counter() - start_time,tags=[f"limit:{limit}"])
 
             concurrent.futures.wait(
                 [future_memories, future_graph_entities] if future_graph_entities else [future_memories]
@@ -516,8 +524,12 @@ class Memory(MemoryBase):
             return {"results": original_memories}
 
     def _search_vector_store(self, query, filters, limit):
+        start_time = time.perf_counter()
         embeddings = self.embedding_model.embed(query, "search")
+        metrics.histogram("vector_embedding_time", time.perf_counter() - start_time,tags=[f"limit:{limit}"])
+        start_time = time.perf_counter()
         memories = self.vector_store.search(query=query, vectors=embeddings, limit=limit, filters=filters)
+        metrics.histogram("vector_store_search_time", time.perf_counter() - start_time,tags=[f"limit:{limit}"])
 
         excluded_keys = {
             "user_id",

@@ -1,4 +1,5 @@
 import logging
+import time
 
 from mem0.memory.utils import format_entities
 
@@ -22,8 +23,10 @@ from mem0.graphs.tools import (
 )
 from mem0.graphs.utils import EXTRACT_RELATIONS_PROMPT, get_delete_messages
 from mem0.utils.factory import EmbedderFactory, LlmFactory
+from mem0.utils.metrics import DatadogMetrics
 
 logger = logging.getLogger(__name__)
+metrics = DatadogMetrics.get_instance()
 
 
 class MemoryGraph:
@@ -84,8 +87,12 @@ class MemoryGraph:
                 - "contexts": List of search results from the base data store.
                 - "entities": List of related graph data based on the query.
         """
+        start_time = time.perf_counter()
         entity_type_map = self._retrieve_nodes_from_data(query, filters)
+        metrics.histogram("graph_determine_nodes_time", time.perf_counter() - start_time,tags=[f"limit:{limit}"])
+        start_time = time.perf_counter()
         search_output = self._search_graph_db(node_list=list(entity_type_map.keys()), filters=filters)
+        metrics.histogram("graph_search_db_time", time.perf_counter() - start_time,tags=[f"limit:{limit}"])
 
         if not search_output:
             return []
