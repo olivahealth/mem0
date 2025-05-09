@@ -474,6 +474,7 @@ class Memory(MemoryBase):
         Returns:
             list: List of search results.
         """
+        start_time = time.perf_counter()
         filters = filters or {}
         if user_id:
             filters["user_id"] = user_id
@@ -492,14 +493,10 @@ class Memory(MemoryBase):
         )
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            start_time = time.perf_counter()
             future_memories = executor.submit(self._search_vector_store, query, filters, limit)
-            metrics.histogram("vector_search_total_time", time.perf_counter() - start_time,tags=[f"limit:{limit}"])
-            start_time = time.perf_counter()
             future_graph_entities = (
                 executor.submit(self.graph.search, query, filters, limit) if self.enable_graph else None
             )
-            metrics.histogram("graph_search_total_time", time.perf_counter() - start_time,tags=[f"limit:{limit}"])
 
             concurrent.futures.wait(
                 [future_memories, future_graph_entities] if future_graph_entities else [future_memories]
@@ -508,6 +505,7 @@ class Memory(MemoryBase):
             original_memories = future_memories.result()
             graph_entities = future_graph_entities.result() if future_graph_entities else None
 
+        metrics.histogram("search_total_time", time.perf_counter() - start_time,tags=[f"limit:{limit}"])
         if self.enable_graph:
             return {"results": original_memories, "relations": graph_entities}
 
@@ -527,9 +525,9 @@ class Memory(MemoryBase):
         start_time = time.perf_counter()
         embeddings = self.embedding_model.embed(query, "search")
         metrics.histogram("vector_embedding_time", time.perf_counter() - start_time,tags=[f"limit:{limit}"])
-        start_time = time.perf_counter()
+        store_start_time = time.perf_counter()
         memories = self.vector_store.search(query=query, vectors=embeddings, limit=limit, filters=filters)
-        metrics.histogram("vector_store_search_time", time.perf_counter() - start_time,tags=[f"limit:{limit}"])
+        metrics.histogram("vector_store_search_time", time.perf_counter() - store_start_time,tags=[f"limit:{limit}"])
 
         excluded_keys = {
             "user_id",
@@ -561,7 +559,7 @@ class Memory(MemoryBase):
             }
             for mem in memories
         ]
-
+        metrics.histogram("vector_search_total_time", time.perf_counter() - start_time, tags=[f"limit:{limit}"])
         return original_memories
 
     def update(self, memory_id, data):

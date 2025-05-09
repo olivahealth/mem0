@@ -90,9 +90,9 @@ class MemoryGraph:
         start_time = time.perf_counter()
         entity_type_map = self._retrieve_nodes_from_data(query, filters)
         metrics.histogram("graph_determine_nodes_time", time.perf_counter() - start_time,tags=[f"limit:{limit}"])
-        start_time = time.perf_counter()
+        db_start_time = time.perf_counter()
         search_output = self._search_graph_db(node_list=list(entity_type_map.keys()), filters=filters)
-        metrics.histogram("graph_search_db_time", time.perf_counter() - start_time,tags=[f"limit:{limit}"])
+        metrics.histogram("graph_search_db_time", time.perf_counter() - db_start_time,tags=[f"limit:{limit}"])
 
         if not search_output:
             return []
@@ -110,7 +110,7 @@ class MemoryGraph:
             search_results.append({"source": item[0], "relationship": item[1], "destination": item[2]})
 
         logger.info(f"Returned {len(search_results)} search results")
-
+        metrics.histogram("graph_search_total_time", time.perf_counter() - start_time, tags=[f"limit:{limit}"])
         return search_results
 
     def delete_all(self, filters):
